@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!/usr/bin/env python
 from watchdog.events import FileSystemEventHandler
 import unified2.parser
 import re
@@ -19,6 +19,8 @@ class HayFever(FileSystemEventHandler):
 			self.send_to = kwargs.pop('destination')
 			self.useragent = kwargs.pop('useragent')
 			self.watchpath = kwargs.pop('watch')
+			if 'verifycerts' in kwargs and kwargs.pop('verifycerts') == 'False': self.verify=False 
+			else: self.verify=True
 		except KeyError as e:
 			print "You have not defined '{}' properly in the config file!".format(e.args[0])
 			exit()
@@ -98,18 +100,18 @@ class HayFever(FileSystemEventHandler):
 
 
 	def send_data(self, eventdata):
-		succeed = ''
+		success = False
 		tries = 0
 		r = None
 		# If at first you don't succeed, try again. And again, and again, and again, and again.
-		# Server must return "Success!" in the text or we will assume the delivery failed.
-		while not (succeed == 'Success!' and tries <= 5):
+		# Server must return "{'Success': 1}" in the text or we will assume the delivery failed.
+		while not (success and tries <= 5):
 			headers = {'User-Agent': self.useragent,
 			'Content-Type': 'application/json'}
 			url = self.send_to
-			r = requests.put(url, headers=headers, data=json.dumps(eventdata))
-			if r.text == 'Success!':
-				succeed = r.text
+			r = requests.put(url, headers=headers, data=json.dumps(eventdata), verify=self.verify)
+			if bool(r.json()['success']):
+				success = True
 				# Store the highest delivered event ID in the lastevent file
 				with open(self.lasteventfile, 'w') as lastev:
 					maxid = max([ int(k) for k in eventdata['events'].keys() ])
@@ -117,10 +119,10 @@ class HayFever(FileSystemEventHandler):
 			tries += 1
 		
 		# If we fail at delivering the data, complain.
-		if r.text != 'Success!':
+		if not success:
 			alert = 'Alert: {} attempts to send event data failed'.format(str(tries))
 			r = requests.put(self.send_to, headers={'User-Agent': self.useragent,
-				'Content-Type': 'text/plain'}, data=alert)
+				'Content-Type': 'text/plain'}, data=alert, verify=self.verify)
 
 
 
