@@ -4,7 +4,6 @@ import time
 from watchdog.observers import Observer
 import os
 from hayfever import HayFever
-import sys
 			
 
 if __name__ == "__main__":
@@ -14,7 +13,7 @@ if __name__ == "__main__":
        			(key, val) = line.strip().split(": ")
 			d[key] = val
 	if not os.path.isdir(d['watch']):
-		raise ValueError("{} is not a valid directory.".format(sys.argv[1]))
+		raise ValueError("{} is not a valid directory.".format(d['watch']))
 	if len(d['destination']) < 1:
 		raise ValueError("Destination must be provided.")
 

@@ -88,8 +88,8 @@ class HayFever(FileSystemEventHandler):
 		for f in [ os.path.join(self.watchpath, fn) for fn in next(os.walk(self.watchpath))[2] ]:
 			# Event won't be new unless the file was modified after the last event sent
 			# Also ensure the file is a unified2 file
-			if float(lastevent['event_time']) < os.path.getmtime(f) 
-				and re.search('\\.u2\\.\\d+$', f):
+			if ( float(lastevent['event_time']) < os.path.getmtime(f) and
+				re.search('\\.u2\\.\\d+$', f) ):
 				# Add anything new to the dictionary
 				events.update(self.find_new_events_in_file(f, lastevent))
 
