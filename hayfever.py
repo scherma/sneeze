@@ -100,18 +100,18 @@ class HayFever(FileSystemEventHandler):
 
 
 	def send_data(self, eventdata):
-		success = False
+		success = ""
 		tries = 0
 		r = None
 		# If at first you don't succeed, try again. And again, and again, and again, and again.
 		# Server must return "{'Success': 1}" in the text or we will assume the delivery failed.
-		while not (success and tries <= 5):
+		while not (success == "200" and tries <= 5):
 			headers = {'User-Agent': self.useragent,
 			'Content-Type': 'application/json'}
 			url = self.send_to
 			r = requests.put(url, headers=headers, data=json.dumps(eventdata), verify=self.verify)
-			if bool(r.json()['success']):
-				success = True
+			success = r.status
+			if r.status == "200":
 				# Store the highest delivered event ID in the lastevent file
 				with open(self.lasteventfile, 'w') as lastev:
 					maxid = max([ int(k) for k in eventdata['events'].keys() ])
@@ -119,7 +119,7 @@ class HayFever(FileSystemEventHandler):
 			tries += 1
 		
 		# If we fail at delivering the data, complain.
-		if not success:
+		if not success == "200":
 			alert = 'Alert: {} attempts to send event data failed'.format(str(tries))
 			r = requests.put(self.send_to, headers={'User-Agent': self.useragent,
 				'Content-Type': 'text/plain'}, data=alert, verify=self.verify)
