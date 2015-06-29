@@ -15,11 +15,12 @@ class HayFever(FileSystemEventHandler):
     	def __init__(self, *args, **kwargs):
         	super(HayFever, self).__init__()
         	try:
+			print kwargs
 			self.lasteventfile = kwargs.pop('lasteventfile')
 			self.send_to = kwargs.pop('destination')
 			self.useragent = kwargs.pop('useragent')
-			self.watchpath = kwargs.pop('watch')
-			if 'verifycerts' in kwargs and kwargs.pop('verifycerts') == 'False': self.verify=False 
+			self.watchpath = kwargs.pop('thiswatch') 
+			if 'verifycerts' in kwargs and kwargs.pop('verifycerts') == 'false': self.verify=False 
 			else: self.verify=True
 		except KeyError as e:
 			print "You have not defined '{}' properly in the config file!".format(e.args[0])
@@ -106,6 +107,7 @@ class HayFever(FileSystemEventHandler):
 		# If at first you don't succeed, try again. And again, and again, and again, and again.
 		# Server must return "{'Success': 1}" in the text or we will assume the delivery failed.
 		while not (success == "200" and tries <= 5):
+			print self.__dict__
 			headers = {'User-Agent': self.useragent,
 			'Content-Type': 'application/json'}
 			url = self.send_to
@@ -135,6 +137,7 @@ class HayFever(FileSystemEventHandler):
 
 
 	def on_modified(self, event):
+		print event
 		if re.search('\\.u2\\.\\d+$', event.src_path):
 			events = self.build_data_to_send(event)
 			if len(events['events']) > 0:
