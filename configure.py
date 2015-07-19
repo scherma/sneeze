@@ -45,7 +45,7 @@ class Configure():
 		c = conn.cursor()
 
 		c.execute('''CREATE TABLE lastevent
-				(interface text, event_id int, event_time int, transmit_time int)''')
+				(interface text UNIQUE, event_id int NOT NULL, event_time int NOT NULL, transmit_time int NOT NULL)''')
 
 		conn.commit()
 		conn.close()

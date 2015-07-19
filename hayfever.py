@@ -55,7 +55,7 @@ class HayFever(RegexMatchingEventHandler):
 			if allfiles:
 				events_for_interface[interface].update(self.find_all_new_events(values['path']))
 			else:
-				events_for_interface[interface].update(self.find_new_events_in_file(event.src_path, self.get_last_event()))
+				events_for_interface[interface].update(self.find_new_events_in_file(event.src_path, self.get_last_event(path)))
 			if len(events_for_interface[interface].keys()) > 0:
 				events['eventdata'].update(events_for_interface)
 		return events
@@ -90,7 +90,7 @@ class HayFever(RegexMatchingEventHandler):
 		for f in [ os.path.join(path, fn) for fn in next(os.walk(path))[2] ]:
 			# Event won't be new unless the file was modified after the last event sent
 			# Also ensure the file is a unified2 file
-			if ( float(lastevent['event_time']) < os.path.getmtime(f) and
+			if len(lastevent) > 0 and( float(lastevent['event_time']) < os.path.getmtime(f) and
 				re.search('\\.u2\\.\\d+$', f) ):
 				# Add anything new to the dictionary
 				events.update(self.find_new_events_in_file(f, lastevent))
@@ -103,32 +103,26 @@ class HayFever(RegexMatchingEventHandler):
 		# Store the highest delivered event ID in the lastevent file
 		with sqlite3.connect('trace.db') as lastev:
 			c = lastev.cursor()
-			for interface, values in events['eventdata']:
-				print values
+			for interface, values in events['eventdata'].iteritems():
 				maxid = max([ int(k) for k in values.keys() ])
-				c.execute(	"INSERT OR REPLACE INTO lastevent (event_id, event_time, transmit_time)"
-						" VALUES (%s, %s, %s) WHERE interface = %s",
-						[maxid,1,time.time(),maxid])	#changeme
+				sqlstr = "INSERT OR REPLACE INTO lastevent (event_id, event_time, transmit_time, interface) VALUES (?, ?, ?, ?)"
+				c.execute(sqlstr,[maxid,values[maxid][0]["packet_second"],time.time(),interface])	#changeme
 				lastev.commit()
-				lastev.close()
 
 	def get_last_event(self, path):
 		thisinterface = ""
 		for interface, details in self.watch.iteritems():
 			if details['path'] == path:
 				thisinterface = interface
+		
 		with sqlite3.connect('trace.db') as lastevent:
 			c = lastevent.cursor()
-			c.execute("SELECT interface,event_id,event_time,transmit_time FROM lastevent WHERE interface = %s", (interface))
-			rows = c.fetchall()
+			c.execute("SELECT interface,event_id,event_time,transmit_time FROM lastevent WHERE interface = ?", [thisinterface])
+			rows = c.fetchone()
 			columns = ("interface", "event_id", "event_time", "transmit_time")
-			result = []
-			for row in rows:
-				entry = {}
-				for i in range(len(columns)):
-					entry[columns[i]] = row[i]
-				result.append(entry)
-			
+			result = {} 
+			for i in range(len(columns)):
+				result[columns[i]] = i
 			return result
 
 #	def debug_data(self,data,depth):
@@ -164,11 +158,14 @@ class HayFever(RegexMatchingEventHandler):
 					success = r.status_code
 			tries += 1
 		
+		
 		# If we fail at delivering the data, complain.
-		if not success == "200":
+		if not success == 200:
 			alert = 'Alert: {} attempts to send event data failed'.format(str(tries))
 			r = requests.put(self.send_to, headers={'User-Agent': self.useragent,
 				'Content-Type': 'text/plain'}, data=alert, verify=self.verify)
+		else:
+			self.write_last_event(eventdata)
 
 
 
