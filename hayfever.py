@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from watchdog.events import FileSystemEventHandler
+from watchdog.events import RegexMatchingEventHandler
 import unified2.parser
 import re
 import json
@@ -10,31 +10,36 @@ import socket
 import os.path
 import time
 
-class HayFever(FileSystemEventHandler):
+class HayFever(RegexMatchingEventHandler):
 
     	def __init__(self, *args, **kwargs):
         	super(HayFever, self).__init__()
         	try:
-			print kwargs
 			self.lasteventfile = kwargs.pop('lasteventfile')
 			self.send_to = kwargs.pop('destination')
 			self.useragent = kwargs.pop('useragent')
-			self.watchpath = kwargs.pop('thiswatch') 
 			if 'verifycerts' in kwargs and kwargs.pop('verifycerts') == 'false': self.verify=False 
 			else: self.verify=True
+			self.watch = kwargs.pop('watch')
+			self.on_start()
 		except KeyError as e:
 			print "You have not defined '{}' properly in the config file!".format(e.args[0])
 			exit()
-		self.on_start()
 
-
-
-	def _interface(self):
-		# snort names log directory with the interface name
-		pathdirs = self.watchpath.split('/')
-		return pathdirs[(len(pathdirs) - 1)].split('_')[1]
-
-
+	def _interface_for_event(self, event):
+		# for a given file created/modified event, get the interface it relates to
+		# will always return the first match - users must define path and pattern
+		# well for this to work properly
+		for key, values in self.watch.items():
+			if event.src_path.startswith(values['path']):
+				# if there is a pattern, test that the event file matches it
+				# if both match, this is the interface to give
+			 	if 'pattern' in values.keys():
+					if re.match(values['pattern'], event.src_path):
+						return key
+				# if there is no pattern but the paths match, this is the right interface
+				else:
+					return key
 
 	def _lastevent(self):
 		ev_id = 0
@@ -54,18 +59,25 @@ class HayFever(FileSystemEventHandler):
 
 
 
-	def build_data_to_send(self, event = object, allfiles = False):
+	def build_data_to_send(self, interface = '', event = object, allfiles = False, path = str):
 		# Let's make this RESTy; every time we send something, identify
 		# the origin sensor as part of the data
 		events = {}
-		events['events'] = {}
 		events['sensor'] = socket.gethostname()
-		events['interface'] = self._interface()
-		if allfiles:
-			events['events'].update(self.find_all_new_events())
-		else:
-			events['events'].update(self.find_new_events_in_file(event.src_path, self._lastevent()))
+		events['eventdata'] = {}
+		for interface, values in self.watch.items():
+			events_for_interface = {interface: {}}
+			if allfiles:
+				events_for_interface[interface].update(self.find_all_new_events(values['path']))
+			else:
+				events_for_interface[interface].update(self.find_new_events_in_file(event.src_path, self._lastevent()))
+			if len(events_for_interface[interface].keys()) > 0:
+				events['eventdata'].update(events_for_interface)
 		return events
+
+	def last_event_for_interface(self, interface):
+		a = 1
+
 
 
 
@@ -84,11 +96,11 @@ class HayFever(FileSystemEventHandler):
 
 
 
-	def find_all_new_events(self):
+	def find_all_new_events(self, path):
 		lastevent = self._lastevent()
 		events = {}
 		# Iterate through every file in the directory to identify new events
-		for f in [ os.path.join(self.watchpath, fn) for fn in next(os.walk(self.watchpath))[2] ]:
+		for f in [ os.path.join(path, fn) for fn in next(os.walk(path))[2] ]:
 			# Event won't be new unless the file was modified after the last event sent
 			# Also ensure the file is a unified2 file
 			if ( float(lastevent['event_time']) < os.path.getmtime(f) and
@@ -97,7 +109,21 @@ class HayFever(FileSystemEventHandler):
 				events.update(self.find_new_events_in_file(f, lastevent))
 
 		return events
+	
 
+	def write_last_event(self, events):
+		# Store the highest delivered event ID in the lastevent file
+		with sqlite3.connect('trace.db') as lastev:
+			c = lastev.cursor()
+			for interface, values in events['eventdata']:
+				print values
+				maxid = max([ int(k) for k in values.keys() ])
+				c.execute(	"UPDATE lastevent SET (event_id, event_time, transmit_time)"
+						" = (%s, %s, %s) WHERE interface = %s",
+						[maxid,1,time.time(),maxid])
+				for line in lastev:
+					if line.split(':')[0] == interface:
+						rebuildfile += '{0}:{1}:{2}\n'.format(interface, str(maxid), str(time.time()))
 
 
 	def send_data(self, eventdata):
@@ -105,19 +131,16 @@ class HayFever(FileSystemEventHandler):
 		tries = 0
 		r = None
 		# If at first you don't succeed, try again. And again, and again, and again, and again.
-		# Server must return "{'Success': 1}" in the text or we will assume the delivery failed.
-		while not (success == "200" and tries <= 5):
-			print self.__dict__
+		# Server must return 200 OK or we will assume the delivery failed.
+		while tries <= 5:
 			headers = {'User-Agent': self.useragent,
 			'Content-Type': 'application/json'}
 			url = self.send_to
 			r = requests.put(url, headers=headers, data=json.dumps(eventdata), verify=self.verify)
-			success = r.status
-			if r.status == "200":
-				# Store the highest delivered event ID in the lastevent file
-				with open(self.lasteventfile, 'w') as lastev:
-					maxid = max([ int(k) for k in eventdata['events'].keys() ])
-					lastev.write('{0}:{1}'.format(str(maxid), str(time.time())))
+			success = r.status_code
+			if r.status_code == "200":
+					break
+					success = r.status_code
 			tries += 1
 		
 		# If we fail at delivering the data, complain.
@@ -129,23 +152,24 @@ class HayFever(FileSystemEventHandler):
 
 
 	def on_created(self, event):
-		if re.search('\\.u2\\.\\d+$', event.src_path):
-			events = self.build_data_to_send(event)
-			if len(events['events']) > 0:
+		ev_interface = self._interface_for_event(event)
+		if ev_interface:
+			events = self.build_data_to_send(interface=ev_interface, event=event)
+			if ev_interface in events.keys() and len(events[ev_interface]) > 0:
 				self.send_data(events)
 
 
 
 	def on_modified(self, event):
-		print event
-		if re.search('\\.u2\\.\\d+$', event.src_path):
-			events = self.build_data_to_send(event)
-			if len(events['events']) > 0:
+		ev_interface = self._interface_for_event(event)
+		if ev_interface:
+			events = self.build_data_to_send(interface=ev_interface, event=event)
+			if ev_interface in events.keys() and len(events[ev_interface]) > 0:
 				self.send_data(events)
 
 
 
 	def on_start(self):
 		events = self.build_data_to_send(allfiles=True)
-		if len(events['events']) > 0:
+		if len(events['eventdata']) > 0:
 			self.send_data(events)

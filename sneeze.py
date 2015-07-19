@@ -2,38 +2,32 @@
 
 import time
 from watchdog.observers import Observer
+import re
 import os
 from hayfever import HayFever
-			
+import configure
+
 
 if __name__ == "__main__":
-	d = {}
-	d['watch'] = []
-	with open("sneeze.conf") as f:
-    		for line in f:
-       			(key, val) = line.strip().split(": ")
-			if key == "watch":
-				d['watch'].append(val)
-			else:
-				d[key] = val
-	for p in d['watch']:
-		if not os.path.isdir(p):
-			raise ValueError("{} is not a valid directory.".format(p))
-
-	if len(d['destination']) < 1:
-		raise ValueError("Destination must be provided.")
-
+	configuration = configure.Configure()
 	# create event handler
-	event_handler = HayFever(thiswatch=p, **d)
+	# dictionary contains mapping of interface to path and pattern
+	# HayFever must verify which path and pattern an event matches
+	# and include the relevant interface in the event
+	event_handler = HayFever(**configuration.confdata)
+	
+	threads = []
+	observer = Observer()
 
-	for p in d['watch']:
+	for interface, values in configuration.confdata['watch'].items():
 		# create event detector
-		observer = Observer()
-		observer.schedule(event_handler, p, recursive=True)
-	    	observer.start()
-		try:
-			while True:
-				time.sleep(1)
-		except KeyboardInterrupt:
-			observer.stop()
-		observer.join()
+		observer.schedule(event_handler, values['path'], recursive=True)
+		threads.append(observer)
+	
+	observer.start()
+	try:
+		while True:
+			time.sleep(1)
+	except KeyboardInterrupt:
+		observer.stop()
+	observer.join()
