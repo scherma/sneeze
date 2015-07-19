@@ -9,6 +9,7 @@ import base64
 import socket
 import os.path
 import time
+import sqlite3
 
 class HayFever(RegexMatchingEventHandler):
 
@@ -41,22 +42,6 @@ class HayFever(RegexMatchingEventHandler):
 				else:
 					return key
 
-	def _lastevent(self):
-		ev_id = 0
-		ev_time = 0
-		with open(self.lasteventfile, 'a+') as lastevent:
-			lastevent.seek(0)
-			line = lastevent.readline()
-			try:
-				# If the file has data, store it in the variables
-				# If it doesn't, variables will default to nil and and all
-				# events will be treated as new
-				(ev_id, ev_time,) = line.strip().split(':')
-			except:
-				do_nothing = 1
-			return {'event_id': ev_id,
-				'event_time': ev_time}
-
 
 
 	def build_data_to_send(self, interface = '', event = object, allfiles = False, path = str):
@@ -70,12 +55,12 @@ class HayFever(RegexMatchingEventHandler):
 			if allfiles:
 				events_for_interface[interface].update(self.find_all_new_events(values['path']))
 			else:
-				events_for_interface[interface].update(self.find_new_events_in_file(event.src_path, self._lastevent()))
+				events_for_interface[interface].update(self.find_new_events_in_file(event.src_path, self.get_last_event()))
 			if len(events_for_interface[interface].keys()) > 0:
 				events['eventdata'].update(events_for_interface)
 		return events
 
-	def last_event_for_interface(self, interface):
+	def last_event_for_interface(self, interface): #changeme
 		a = 1
 
 
@@ -89,6 +74,8 @@ class HayFever(RegexMatchingEventHandler):
 			for (ev, ev_tail,) in unified2.parser.parse(eventfile):
 				# If it's a new event, add it to the dict
 				if int(ev['event_id']) > int(lastevent['event_id']):
+					if "packet_data" in ev:
+						ev['packet_data'] = base64.b64encode(ev['packet_data'])
 					b64tail = base64.b64encode(ev_tail)
 					events[ev['event_id']] = [ev, b64tail]
 
@@ -97,7 +84,7 @@ class HayFever(RegexMatchingEventHandler):
 
 
 	def find_all_new_events(self, path):
-		lastevent = self._lastevent()
+		lastevent = self.get_last_event(path)
 		events = {}
 		# Iterate through every file in the directory to identify new events
 		for f in [ os.path.join(path, fn) for fn in next(os.walk(path))[2] ]:
@@ -110,6 +97,7 @@ class HayFever(RegexMatchingEventHandler):
 
 		return events
 	
+	
 
 	def write_last_event(self, events):
 		# Store the highest delivered event ID in the lastevent file
@@ -118,13 +106,46 @@ class HayFever(RegexMatchingEventHandler):
 			for interface, values in events['eventdata']:
 				print values
 				maxid = max([ int(k) for k in values.keys() ])
-				c.execute(	"UPDATE lastevent SET (event_id, event_time, transmit_time)"
-						" = (%s, %s, %s) WHERE interface = %s",
-						[maxid,1,time.time(),maxid])
-				for line in lastev:
-					if line.split(':')[0] == interface:
-						rebuildfile += '{0}:{1}:{2}\n'.format(interface, str(maxid), str(time.time()))
+				c.execute(	"INSERT OR REPLACE INTO lastevent (event_id, event_time, transmit_time)"
+						" VALUES (%s, %s, %s) WHERE interface = %s",
+						[maxid,1,time.time(),maxid])	#changeme
+				lastev.commit()
+				lastev.close()
 
+	def get_last_event(self, path):
+		thisinterface = ""
+		for interface, details in self.watch.iteritems():
+			if details['path'] == path:
+				thisinterface = interface
+		with sqlite3.connect('trace.db') as lastevent:
+			c = lastevent.cursor()
+			c.execute("SELECT interface,event_id,event_time,transmit_time FROM lastevent WHERE interface = %s", (interface))
+			rows = c.fetchall()
+			columns = ("interface", "event_id", "event_time", "transmit_time")
+			result = []
+			for row in rows:
+				entry = {}
+				for i in range(len(columns)):
+					entry[columns[i]] = row[i]
+				result.append(entry)
+			
+			return result
+
+#	def debug_data(self,data,depth):
+#		indent = ''
+#		for x in range(0,depth):
+#			indent += '\t'
+#		if isinstance(data,dict):
+#			for key,value in data.iteritems():
+#				print "{}{}: {}\n".format(indent, type(key), str(key))
+#				print json.dumps(key)
+#				self.debug_data(value, depth + 1)
+#		elif isinstance(data,list):
+#			for value in data:
+#				self.debug_data(value, depth + 1)
+#		else:
+#			print "{}{}: {}\n".format(indent, type(data), str(data))
+#			print json.dumps(data)
 
 	def send_data(self, eventdata):
 		success = ""
@@ -164,8 +185,8 @@ class HayFever(RegexMatchingEventHandler):
 		ev_interface = self._interface_for_event(event)
 		if ev_interface:
 			events = self.build_data_to_send(interface=ev_interface, event=event)
-			if ev_interface in events.keys() and len(events[ev_interface]) > 0:
-				self.send_data(events)
+		if ev_interface in events.keys() and len(events[ev_interface]) > 0:
+			self.send_data(events)
 
 
 
