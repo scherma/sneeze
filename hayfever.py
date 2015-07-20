@@ -55,13 +55,26 @@ class HayFever(RegexMatchingEventHandler):
 			if allfiles:
 				events_for_interface[interface].update(self.find_all_new_events(values['path']))
 			else:
+				
 				events_for_interface[interface].update(self.find_new_events_in_file(event.src_path, self.get_last_event(path)))
 			if len(events_for_interface[interface].keys()) > 0:
 				events['eventdata'].update(events_for_interface)
 		return events
 
+
+
 	def last_event_for_interface(self, interface): #changeme
-		a = 1
+		with sqlite3.connect('trace.db') as ledb:
+			c = ledb.cursor()
+			c.execute('SELECT interface,event_id,event_time,transmit_time FROM lastevent WHERE interface = ?', interface)
+			data = c.fetchone()
+			event = {}
+			event["interface"] = interface
+			event["event_id"] = data[1]
+			event["event_time"] = data[2]
+			event["transmit_time"] = data[3]
+
+			return event
 
 
 
@@ -89,41 +102,49 @@ class HayFever(RegexMatchingEventHandler):
 		# Iterate through every file in the directory to identify new events
 		for f in [ os.path.join(path, fn) for fn in next(os.walk(path))[2] ]:
 			# Event won't be new unless the file was modified after the last event sent
-			# Also ensure the file is a unified2 file
-			if len(lastevent) > 0 and( float(lastevent['event_time']) < os.path.getmtime(f) and
-				re.search('\\.u2\\.\\d+$', f) ):
+			if float(lastevent['transmit_time']) < os.path.getmtime(f):
+			# removed this line as uinifed2 files don't have to follow this naming convention
+			# a non unified2 file will not cause an exception, the result will simply be empty
+			#	re.search('\\.u2\\.\\d+$', f)):
 				# Add anything new to the dictionary
 				events.update(self.find_new_events_in_file(f, lastevent))
-
 		return events
 	
 	
 
 	def write_last_event(self, events):
-		# Store the highest delivered event ID in the lastevent file
+		# Store the highest delivered event ID in the trace.db file
 		with sqlite3.connect('trace.db') as lastev:
 			c = lastev.cursor()
 			for interface, values in events['eventdata'].iteritems():
+				# update DB file with each interface's most recent event
 				maxid = max([ int(k) for k in values.keys() ])
-				sqlstr = "INSERT OR REPLACE INTO lastevent (event_id, event_time, transmit_time, interface) VALUES (?, ?, ?, ?)"
-				c.execute(sqlstr,[maxid,values[maxid][0]["packet_second"],time.time(),interface])	#changeme
+				sqlstr = "INSERT OR REPLACE INTO lastevent (event_id, event_time, event_micro_time, transmit_time, interface) VALUES (?, ?, ?, ?, ?)"
+				c.execute(sqlstr,[maxid,values[maxid][0]["packet_second"],values[maxid][0]["packet_microsecond"],time.time(),interface])
 				lastev.commit()
+
+
 
 	def get_last_event(self, path):
 		thisinterface = ""
 		for interface, details in self.watch.iteritems():
-			if details['path'] == path:
+			if path.startswith(details["path"]):
 				thisinterface = interface
-		
 		with sqlite3.connect('trace.db') as lastevent:
 			c = lastevent.cursor()
 			c.execute("SELECT interface,event_id,event_time,transmit_time FROM lastevent WHERE interface = ?", [thisinterface])
 			rows = c.fetchone()
 			columns = ("interface", "event_id", "event_time", "transmit_time")
 			result = {} 
+			
 			for i in range(len(columns)):
-				result[columns[i]] = i
-			return result
+				if rows:
+					result[columns[i]] = rows[i]
+				else:	
+					result = {"interface": "", "event_id": 0, "event_time": 0, "transmit_time": 0}
+		return result
+
+
 
 #	def debug_data(self,data,depth):
 #		indent = ''
@@ -140,6 +161,8 @@ class HayFever(RegexMatchingEventHandler):
 #		else:
 #			print "{}{}: {}\n".format(indent, type(data), str(data))
 #			print json.dumps(data)
+
+
 
 	def send_data(self, eventdata):
 		success = ""
@@ -172,7 +195,7 @@ class HayFever(RegexMatchingEventHandler):
 	def on_created(self, event):
 		ev_interface = self._interface_for_event(event)
 		if ev_interface:
-			events = self.build_data_to_send(interface=ev_interface, event=event)
+			events = self.build_data_to_send(interface=ev_interface, event=event, path=event.src_path)
 			if ev_interface in events.keys() and len(events[ev_interface]) > 0:
 				self.send_data(events)
 
@@ -181,7 +204,7 @@ class HayFever(RegexMatchingEventHandler):
 	def on_modified(self, event):
 		ev_interface = self._interface_for_event(event)
 		if ev_interface:
-			events = self.build_data_to_send(interface=ev_interface, event=event)
+			events = self.build_data_to_send(interface=ev_interface, event=event, path=event.src_path)
 		if ev_interface in events.keys() and len(events[ev_interface]) > 0:
 			self.send_data(events)
 
