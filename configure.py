@@ -18,18 +18,24 @@ class Configure():
 					d['watch'][interface]['path'] = values['path']
 				elif 'pattern' in values.keys():
 					d['watch'][interface]['pattern'] = values['pattern']
+				elif 'lasteventfile' in values.keys():
+					d['lastevent'] = values['lasteventfile']
 				else:
 					d.update(values)
+		
+		# make sure sneeze.conf specifies valid paths to watch
 		for interface, values in d['watch'].items():
 			if not os.path.isdir(values['path']):
 				raise ValueError("{} is not a valid directory.".format(values['path']))
 
+		# ensure the destination provided is not empty
 		if len(d['destination']) < 1:
 			raise ValueError("Destination must be provided.")
 
 		self.confdata = d
 		
-		if not os.path.exists('trace.db'):
+		# initialise the sent events database
+		if not os.path.exists(d['lastevent']):
 			self.create_tracefile()
 
 
@@ -38,10 +44,10 @@ class Configure():
 		if groups.group('key') and groups.group('val'):
 			return { groups.group('key'): groups.group('val') }
 		else:
-			raise ValueError("{} is not a valid configuration option".format(line))
+			raise ValueError("{} is not correctly formatted".format(line))
 
 	def create_tracefile(self):
-		conn = sqlite3.connect('trace.db')
+		conn = sqlite3.connect(self.confdata['lastevent'])
 		c = conn.cursor()
 
 		c.execute('''CREATE TABLE lastevent

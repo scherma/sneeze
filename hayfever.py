@@ -16,16 +16,16 @@ class HayFever(RegexMatchingEventHandler):
     	def __init__(self, *args, **kwargs):
         	super(HayFever, self).__init__()
         	try:
-			self.lasteventfile = kwargs.pop('lasteventfile')
+			self.lasteventfile = kwargs.pop('lastevent')
 			self.send_to = kwargs.pop('destination')
 			self.useragent = kwargs.pop('useragent')
 			if 'verifycerts' in kwargs and kwargs.pop('verifycerts') == 'false': self.verify=False 
 			else: self.verify=True
 			self.watch = kwargs.pop('watch')
-			self.on_start()
 		except KeyError as e:
 			print "You have not defined '{}' properly in the config file!".format(e.args[0])
 			exit()
+		self.on_start()
 
 	def _interface_for_event(self, event):
 		# for a given file created/modified event, get the interface it relates to
@@ -45,13 +45,15 @@ class HayFever(RegexMatchingEventHandler):
 
 
 	def build_data_to_send(self, interface = '', event = object, allfiles = False, path = str):
-		# Let's make this RESTy; every time we send something, identify
-		# the origin sensor as part of the data
+		# every time we send something, identify the origin sensor as part of the data
 		events = {}
 		events['sensor'] = socket.gethostname()
 		events['eventdata'] = {}
+		# always prep data with the same structure, even if there only events from a single interface
 		for interface, values in self.watch.items():
 			events_for_interface = {interface: {}}
+			# check entire directory for new events when script starts
+			# otherwise just check the file which got updated
 			if allfiles:
 				events_for_interface[interface].update(self.find_all_new_events(values['path']))
 			else:
@@ -64,7 +66,7 @@ class HayFever(RegexMatchingEventHandler):
 
 
 	def last_event_for_interface(self, interface): #changeme
-		with sqlite3.connect('trace.db') as ledb:
+		with sqlite3.connect(self.lasteventfile) as ledb:
 			c = ledb.cursor()
 			c.execute('SELECT interface,event_id,event_time,transmit_time FROM lastevent WHERE interface = ?', interface)
 			data = c.fetchone()
@@ -82,16 +84,23 @@ class HayFever(RegexMatchingEventHandler):
 	def find_new_events_in_file(self, eventfile, lastevent):
 		events = {}
 		# First make sure the file that changed is unified2
-		if re.search('\\.u2\\.\\d+$', eventfile):
-			# Check every event in the file
+#		if re.search('\\.u2\\.\\d+$', eventfile):
+		# Check every event in the file
+		if not os.path.isdir(eventfile):
 			for (ev, ev_tail,) in unified2.parser.parse(eventfile):
 				# If it's a new event, add it to the dict
 				if int(ev['event_id']) > int(lastevent['event_id']):
+					# events have an entry defining the signature, revision etc
+					# but may have an additional entry containing packet data
+					# therefore only create a new list if the event is not already
+					# found in the dict we are building
+					if ev['event_id'] not in events:
+						events[ev['event_id']] = []
+					events[ev['event_id']].append(ev)
 					if "packet_data" in ev:
 						ev['packet_data'] = base64.b64encode(ev['packet_data'])
-					b64tail = base64.b64encode(ev_tail)
-					events[ev['event_id']] = [ev, b64tail]
-
+						b64tail = base64.b64encode(ev_tail)
+						events[ev['event_id']].append(b64tail)
 		return events
 
 
@@ -113,24 +122,26 @@ class HayFever(RegexMatchingEventHandler):
 	
 
 	def write_last_event(self, events):
-		# Store the highest delivered event ID in the trace.db file
-		with sqlite3.connect('trace.db') as lastev:
+		# Store the highest delivered event ID in the last event db file
+		with sqlite3.connect(self.lasteventfile) as lastev:
 			c = lastev.cursor()
 			for interface, values in events['eventdata'].iteritems():
 				# update DB file with each interface's most recent event
 				maxid = max([ int(k) for k in values.keys() ])
 				sqlstr = "INSERT OR REPLACE INTO lastevent (event_id, event_time, event_micro_time, transmit_time, interface) VALUES (?, ?, ?, ?, ?)"
-				c.execute(sqlstr,[maxid,values[maxid][0]["packet_second"],values[maxid][0]["packet_microsecond"],time.time(),interface])
+				values = [maxid, values[maxid][0]["event_second"], values[maxid][0]["event_microsecond"], time.time(), interface]
+				c.execute(sqlstr,values)
 				lastev.commit()
 
 
 
 	def get_last_event(self, path):
+		# given a watch path, find the most recently sent event
 		thisinterface = ""
 		for interface, details in self.watch.iteritems():
 			if path.startswith(details["path"]):
 				thisinterface = interface
-		with sqlite3.connect('trace.db') as lastevent:
+		with sqlite3.connect(self.lasteventfile) as lastevent:
 			c = lastevent.cursor()
 			c.execute("SELECT interface,event_id,event_time,transmit_time FROM lastevent WHERE interface = ?", [thisinterface])
 			rows = c.fetchone()
@@ -165,30 +176,32 @@ class HayFever(RegexMatchingEventHandler):
 
 
 	def send_data(self, eventdata):
-		success = ""
-		tries = 0
-		r = None
-		# If at first you don't succeed, try again. And again, and again, and again, and again.
-		# Server must return 200 OK or we will assume the delivery failed.
-		while tries <= 5:
-			headers = {'User-Agent': self.useragent,
-			'Content-Type': 'application/json'}
-			url = self.send_to
-			r = requests.put(url, headers=headers, data=json.dumps(eventdata), verify=self.verify)
-			success = r.status_code
-			if r.status_code == "200":
-					break
-					success = r.status_code
-			tries += 1
+		# only send if there is data to be sent
+		if eventdata:
+			success = ""
+			tries = 0
+			r = None
+			# If at first you don't succeed, try again. And again, and again, and again, and again.
+			# Server must return 200 OK or we will assume the delivery failed.
+			while tries <= 5:
+				headers = {'User-Agent': self.useragent,
+				'Content-Type': 'application/json'}
+				url = self.send_to
+				r = requests.put(url, headers=headers, data=json.dumps(eventdata), verify=self.verify)
+				success = r.status_code
+				if r.status_code == "200":
+						break
+						success = r.status_code
+				tries += 1
 		
 		
-		# If we fail at delivering the data, complain.
-		if not success == 200:
-			alert = 'Alert: {} attempts to send event data failed'.format(str(tries))
-			r = requests.put(self.send_to, headers={'User-Agent': self.useragent,
-				'Content-Type': 'text/plain'}, data=alert, verify=self.verify)
-		else:
-			self.write_last_event(eventdata)
+			# If we fail at delivering the data, complain.
+			if not success == 200:
+				alert = 'Alert: {} attempts to send event data failed'.format(str(tries))
+				r = requests.put(self.send_to, headers={'User-Agent': self.useragent,
+					'Content-Type': 'text/plain'}, data=alert, verify=self.verify)
+			else:
+				self.write_last_event(eventdata)
 
 
 
