@@ -1,11 +1,12 @@
 # sneeze
 
-## Snort event pusher.
+## Snort event pusher
 Requirements:
 * python2.7
 * watchdog
 * unified2
 * requests
+* sqlite3
 
 The purpose of sneeze is very simple:
 * Watch a directory for updated or added unified2 files
