@@ -6,10 +6,14 @@ import re
 import os
 from hayfever import HayFever
 import configure
-
+import sys
 
 if __name__ == "__main__":
-	configuration = configure.Configure()
+	dest = ""
+	# if user supplies a destination as an argument, use that
+	if len(sys.argv) > 1:
+		dest = sys.argv[1]
+	configuration = configure.Configure(dest)
 	# create event handler
 	# dictionary contains mapping of interface to path and pattern
 	# HayFever must verify which path and pattern an event matches

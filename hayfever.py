@@ -1,15 +1,6 @@
 #!/usr/bin/env python
 from watchdog.events import RegexMatchingEventHandler
-import unified2.parser
-import re
-import json
-import requests
-import struct
-import base64
-import socket
-import os.path
-import time
-import sqlite3
+import unified2.parser, re, json, requests, struct, base64, socket, os.path, time, sqlite3
 
 class HayFever(RegexMatchingEventHandler):
 
@@ -68,13 +59,14 @@ class HayFever(RegexMatchingEventHandler):
 	def last_event_for_interface(self, interface): #changeme
 		with sqlite3.connect(self.lasteventfile) as ledb:
 			c = ledb.cursor()
-			c.execute('SELECT interface,event_id,event_time,transmit_time FROM lastevent WHERE interface = ?', interface)
+			c.execute('SELECT interface,event_id,event_time,event_micro_time,transmit_time FROM lastevent WHERE interface = ?', interface)
 			data = c.fetchone()
 			event = {}
 			event["interface"] = interface
 			event["event_id"] = data[1]
 			event["event_time"] = data[2]
-			event["transmit_time"] = data[3]
+			event["event_micro_time"] = data[3]
+			event["transmit_time"] = data[4]
 
 			return event
 
@@ -89,7 +81,8 @@ class HayFever(RegexMatchingEventHandler):
 		if not os.path.isdir(eventfile):
 			for (ev, ev_tail,) in unified2.parser.parse(eventfile):
 				# If it's a new event, add it to the dict
-				if int(ev['event_id']) > int(lastevent['event_id']):
+				if ( int(ev['event_second']) >= int(lastevent['event_time']) 
+				and int(ev['event_id']) != int(lastevent['event_id'])):
 					# events have an entry defining the signature, revision etc
 					# but may have an additional entry containing packet data
 					# therefore only create a new list if the event is not already
@@ -143,16 +136,16 @@ class HayFever(RegexMatchingEventHandler):
 				thisinterface = interface
 		with sqlite3.connect(self.lasteventfile) as lastevent:
 			c = lastevent.cursor()
-			c.execute("SELECT interface,event_id,event_time,transmit_time FROM lastevent WHERE interface = ?", [thisinterface])
+			c.execute("SELECT interface,event_id,event_time,event_micro_time,transmit_time FROM lastevent WHERE interface = ?", [thisinterface])
 			rows = c.fetchone()
-			columns = ("interface", "event_id", "event_time", "transmit_time")
+			columns = ("interface", "event_id", "event_time", "event_micro_time", "transmit_time")
 			result = {} 
 			
 			for i in range(len(columns)):
 				if rows:
 					result[columns[i]] = rows[i]
 				else:	
-					result = {"interface": "", "event_id": 0, "event_time": 0, "transmit_time": 0}
+					result = {"interface": "", "event_id": 0, "event_time": 0, "event_micro_time": 0, "transmit_time": 0}
 		return result
 
 
@@ -189,9 +182,10 @@ class HayFever(RegexMatchingEventHandler):
 				url = self.send_to
 				r = requests.put(url, headers=headers, data=json.dumps(eventdata), verify=self.verify)
 				success = r.status_code
-				if r.status_code == "200":
-						break
-						success = r.status_code
+				if r.status_code == 200:
+					tries = 5
+					success = r.status_code
+					break
 				tries += 1
 		
 		

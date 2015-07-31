@@ -2,12 +2,17 @@
 import sqlite3
 import os
 import re
+import appdirs
 
 class Configure():
-	def __init__(self):
+	def __init__(self, dest):
+		appname = "sneeze"
+		appauthor = "scherma"
 		d = {}
 		d['watch'] = {}
-		with open("sneeze.conf") as f:
+		confpath = appdirs.user_config_dir(appname,appauthor)
+		self.build_default_config(confpath, dest)
+		with open(os.path.join(confpath,"sneeze.conf")) as f:
 			interface = ''
 			for line in f:
 				values = self.get_conf_item(line)
@@ -55,3 +60,27 @@ class Configure():
 
 		conn.commit()
 		conn.close()
+	
+	def build_default_config(self, confpath, dest):
+		conffile = os.path.join(confpath, "sneeze.conf")
+		if not os.path.exists(confpath):
+			os.makedirs(confpath)
+			
+		if not os.path.exists(conffile):
+			with open(conffile, "w") as f:
+				f.write(self.build_config_string(confpath, dest))
+
+	def build_config_string(self, confpath, dest):
+		if not dest:
+			dest = "https://192.168.1.10:9001"	
+		confitems = [ 	
+			"destination: {}".format(dest),
+			"lasteventfile: {}".format(os.path.join(confpath, "trace.db")),
+			"useragent: sneeze/0.1",
+			"verifycerts: false"	]
+
+		for dirname in next(os.walk("/var/log/snort"))[1]:
+			confitems.append("interface: {}".format(dirname))
+			confitems.append("path: {}".format(os.path.join("/var/log/snort",dirname)))
+		confstring = "\n".join(confitems)
+		return confstring
