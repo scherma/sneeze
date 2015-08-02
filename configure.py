@@ -3,6 +3,7 @@ import sqlite3
 import os
 import re
 import appdirs
+import sys
 
 class Configure():
 	def __init__(self, dest):
@@ -69,6 +70,9 @@ class Configure():
 		if not os.path.exists(conffile):
 			with open(conffile, "w") as f:
 				f.write(self.build_config_string(confpath, dest))
+			print "Edit the default configuration before starting sneeze"
+			print "The file is in {}".format(conffile)
+			sys.exit()
 
 	def build_config_string(self, confpath, dest):
 		if not dest:

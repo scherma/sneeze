@@ -48,7 +48,6 @@ class HayFever(RegexMatchingEventHandler):
 			if allfiles:
 				events_for_interface[interface].update(self.find_all_new_events(values['path']))
 			else:
-				
 				events_for_interface[interface].update(self.find_new_events_in_file(event.src_path, self.get_last_event(path)))
 			if len(events_for_interface[interface].keys()) > 0:
 				events['eventdata'].update(events_for_interface)
@@ -203,7 +202,7 @@ class HayFever(RegexMatchingEventHandler):
 		ev_interface = self._interface_for_event(event)
 		if ev_interface:
 			events = self.build_data_to_send(interface=ev_interface, event=event, path=event.src_path)
-			if ev_interface in events.keys() and len(events[ev_interface]) > 0:
+			if ev_interface in events['eventdata'].keys() and len(events['eventdata'][ev_interface]) > 0:
 				self.send_data(events)
 
 
@@ -212,8 +211,8 @@ class HayFever(RegexMatchingEventHandler):
 		ev_interface = self._interface_for_event(event)
 		if ev_interface:
 			events = self.build_data_to_send(interface=ev_interface, event=event, path=event.src_path)
-		if ev_interface in events.keys() and len(events[ev_interface]) > 0:
-			self.send_data(events)
+			if ev_interface in events['eventdata'].keys() and len(events['eventdata'][ev_interface]) > 0:
+				self.send_data(events)
 
 
 
