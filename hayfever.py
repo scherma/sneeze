@@ -193,7 +193,8 @@ class HayFever(RegexMatchingEventHandler):
                 errorstr = "Warning: could not reach {}. Retrying in {} seconds.".format(self.send_to, self.retry_time)
                 print >> sys.stderr, errorstr
                 time.sleep(self.retry_time)
-                self.send_data(eventdata)
+                # lots more events might have come in while sleeping - check for all new events.
+                self.on_start()
         
         
             # If we fail at delivering the data, complain.
