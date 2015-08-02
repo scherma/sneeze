@@ -3,10 +3,9 @@ from watchdog.events import RegexMatchingEventHandler
 import unified2.parser, re, json, requests, struct, base64, socket, os.path, time, sqlite3
 
 class HayFever(RegexMatchingEventHandler):
-
-        def __init__(self, *args, **kwargs):
-            super(HayFever, self).__init__()
-            try:
+    def __init__(self, *args, **kwargs):
+        super(HayFever, self).__init__()
+        try:
             self.lasteventfile = kwargs.pop('lastevent')
             self.send_to = kwargs.pop('destination')
             self.useragent = kwargs.pop('useragent')
@@ -30,8 +29,8 @@ class HayFever(RegexMatchingEventHandler):
                     if re.match(values['pattern'], event.src_path):
                         return key
                 # if there is no pattern but the paths match, this is the right interface
-                else:
-                    return key
+            else:
+                return key
 
 
 
