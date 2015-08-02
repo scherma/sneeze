@@ -25,12 +25,12 @@ class HayFever(RegexMatchingEventHandler):
             if event.src_path.startswith(values['path']):
                 # if there is a pattern, test that the event file matches it
                 # if both match, this is the interface to give
-                 if 'pattern' in values.keys():
+                if 'pattern' in values.keys():
                     if re.match(values['pattern'], event.src_path):
                         return key
-                # if there is no pattern but the paths match, this is the right interface
-            else:
-                return key
+                # if there is no pattern but the paths match, return the key
+                else:
+                    return key
 
 
 
@@ -46,7 +46,8 @@ class HayFever(RegexMatchingEventHandler):
             # otherwise just check the file which got updated
             if allfiles:
                 events_for_interface[interface].update(self.find_all_new_events(values['path']))
-            else:
+            # only add events into the section for that snort instance
+            elif event.src_path.startswith(values['path']):
                 events_for_interface[interface].update(self.find_new_events_in_file(event.src_path, self.get_last_event(path)))
             if len(events_for_interface[interface].keys()) > 0:
                 events['eventdata'].update(events_for_interface)
