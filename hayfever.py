@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from watchdog.events import RegexMatchingEventHandler
-import unified2.parser, re, json, requests, struct, base64, socket, os.path, time, sqlite3
+import unified2.parser, re, json, requests, struct, base64, socket, os.path, time, sqlite3, sys
+from requests import ConnectionError
 
 class HayFever(RegexMatchingEventHandler):
     def __init__(self, *args, **kwargs):
@@ -12,6 +13,7 @@ class HayFever(RegexMatchingEventHandler):
             if 'verifycerts' in kwargs and kwargs.pop('verifycerts') == 'false': self.verify=False 
             else: self.verify=True
             self.watch = kwargs.pop('watch')
+            self.retry_time = kwargs.pop('retry_time')
         except KeyError as e:
             print "You have not defined '{}' properly in the config file!".format(e.args[0])
             exit()
@@ -170,22 +172,28 @@ class HayFever(RegexMatchingEventHandler):
     def send_data(self, eventdata):
         # only send if there is data to be sent
         if eventdata:
-            success = ""
+            success = None
             tries = 0
             r = None
             # If at first you don't succeed, try again. And again, and again, and again, and again.
             # Server must return 200 OK or we will assume the delivery failed.
-            while tries <= 5:
+#            while tries <= 5:
+            try:
                 headers = {'User-Agent': self.useragent,
                 'Content-Type': 'application/json'}
                 url = self.send_to
                 r = requests.put(url, headers=headers, data=json.dumps(eventdata), verify=self.verify)
                 success = r.status_code
-                if r.status_code == 200:
-                    tries = 5
-                    success = r.status_code
-                    break
-                tries += 1
+#                if r.status_code == 200:
+#                    tries = 5
+#                    success = r.status_code
+#                    break
+#                tries += 1
+            except ConnectionError as e:
+                errorstr = "Warning: could not reach {}. Retrying in {} seconds.".format(self.send_to, self.retry_time)
+                print >> sys.stderr, errorstr
+                time.sleep(self.retry_time)
+                self.send_data(eventdata)
         
         
             # If we fail at delivering the data, complain.

@@ -34,6 +34,11 @@ class Configure():
             if not os.path.isdir(values['path']):
                 raise ValueError("{} is not a valid directory.".format(values['path']))
 
+        if 'retry_time' not in d.keys():
+            d['retry_time'] = 60
+        else:
+            d['retry_time'] = int(d['retry_time'])
+
         # ensure the destination provided is not empty
         if len(d['destination']) < 1:
             raise ValueError("Destination must be provided.")
