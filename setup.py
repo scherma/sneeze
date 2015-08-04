@@ -1,7 +1,8 @@
+#!/usr/bin/env python
 import os
 import setuptools
 
-def read(fname)
+def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
 setuptools.setup(
@@ -15,7 +16,10 @@ setuptools.setup(
     url = "https://github.com/scherma/sneeze",
     packages = ['sneeze'],
     package_dir = {'sneeze': 'src/sneeze'},
-    install_requires = [setuptools.find_packages],
+    entry_points={
+        'console_scripts': ['sneeze = sneeze.__main__:main']
+    },
+    install_requires = [setuptools.find_packages()],
     long_description = read('README.md'),
     classifiers = [
     'Development Status :: 3 - Alpha',
