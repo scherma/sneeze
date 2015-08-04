@@ -19,8 +19,13 @@ setuptools.setup(
     entry_points={
         'console_scripts': ['sneeze = sneeze.__main__:main']
     },
-    install_requires = [setuptools.find_packages()],
-    long_description = read('README.md'),
+    install_requires = [
+        "requests",
+        "watchdog",
+        "sqlite3",
+        "unified2"
+    ],
+    long_description = read('README.rst'),
     classifiers = [
     'Development Status :: 3 - Alpha',
     'Intended Audience :: System Administrators',

@@ -1,6 +1,11 @@
-# sneeze
+======
+sneeze
+======
 
-## Snort event pusher
+------------------
+Snort event pusher
+------------------
+
 Requirements:
 * python2.7
 * watchdog
