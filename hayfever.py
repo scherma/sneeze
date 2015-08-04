@@ -15,7 +15,7 @@ class HayFever(RegexMatchingEventHandler):
             self.watch = kwargs.pop('watch')
             self.retry_time = kwargs.pop('retry_time')
         except KeyError as e:
-            print "You have not defined '{}' properly in the config file!".format(e.args[0])
+            print >> sys.stderr, "You have not defined '{}' properly in the config file!".format(e.args[0])
             exit()
         self.on_start()
 

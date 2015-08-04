@@ -75,8 +75,8 @@ class Configure():
         if not os.path.exists(conffile):
             with open(conffile, "w") as f:
                 f.write(self.build_config_string(confpath, dest))
-            print "Edit the default configuration before starting sneeze"
-            print "The file is in {}".format(conffile)
+            print >> sys.stderr, "Edit the default configuration before starting sneeze"
+            print >> sys.stderr, "The file is in {}".format(conffile)
             sys.exit()
 
     def build_config_string(self, confpath, dest):
