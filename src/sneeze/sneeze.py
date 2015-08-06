@@ -8,9 +8,9 @@ from hayfever import HayFever
 import configure
 import sys
 
-def Sneeze(dest=""):
+def Sneeze(*args, **kwargs):
     # if user supplies a destination as an argument, use that
-    configuration = configure.Configure(dest)
+    configuration = configure.Configure()
     # create event handler
     # dictionary contains mapping of interface to path and pattern
     # HayFever must verify which path and pattern an event matches

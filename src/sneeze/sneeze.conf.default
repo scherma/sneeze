@@ -1,0 +1,21 @@
+# sneeze default configuration
+[sneeze]
+# required items:
+# destination; a http/https URL to send events to
+# useragent; default string provided
+# at least one of 'instance' followed by one 'path'
+# instance; label for the snort instance log to be watched
+# path; full path for the directory the instance is logging unified2 output to
+#
+destination: https://192.168.0.2:9001/newevent
+useragent: sneeze/0.1
+instance: em1
+path: /var/log/snort/em1
+#
+# optional items:
+# retry_time; number of seconds to wait after a failed send before trying again
+# cert; key; a separate client key and cert file, if one is present the other is required
+# combinedcert; a combined key and cert file
+# verifycerts; validate the server's certificate, must be 'true' or 'false'
+#
+verifycerts = false
