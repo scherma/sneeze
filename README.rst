@@ -23,6 +23,5 @@ sneeze
 | ``sneeze init``
 | (edit config file)
 | ``sneeze run``
-
-
-sneeze will not attempt to dictate to the receiver anything about what to do with the event. Identifying the event's rule and text, feeding the event into a database or forwarding to another host, is entirely the responsibility of the receiver. sneeze only verifies that the receiver accepts the delivered event.
+| 
+| sneeze will not attempt to dictate to the receiver anything about what to do with the event. Identifying the event's rule and text, feeding the event into a database or forwarding to another host, is entirely the responsibility of the receiver. sneeze only verifies that the receiver accepts the delivered event.
