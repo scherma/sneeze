@@ -182,7 +182,7 @@ class HayFever(RegexMatchingEventHandler):
                 headers = {'User-Agent': self.useragent,
                 'Content-Type': 'application/json'}
                 url = self.send_to
-                r = requests.put(url, headers=headers, data=json.dumps(eventdata), verify=self.verify)
+                r = requests.post(url, headers=headers, data=json.dumps(eventdata), verify=self.verify)
                 success = r.status_code
 #                if r.status_code == 200:
 #                    tries = 5

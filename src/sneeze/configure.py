@@ -4,6 +4,7 @@ import appdirs
 import shutil
 import ConfigParser
 import sqlite3
+import requests
 
 appname = "sneeze"
 appauthor = "scherma"
@@ -39,7 +40,6 @@ class Configure():
             else:
                 d[entry[0]] = entry[1]
 
-        print d
                 
         # test required items existence
         # validate that required items exist
@@ -79,9 +79,13 @@ class Configure():
         if len(d['destination']) < 1:
             raise ValueError("Destination must be provided.")
         else:
+            if d['verifycerts'] == 'true':
+                verify = True
+            else:
+                verify = False
             # test the connection
-            r.headers = {'content-type': 'application/json', 'user-agent': d['useragent']}
-            r = requests.post(d['destination'], data='{}')
+            headers = {'content-type': 'application/json', 'user-agent': d['useragent']}
+            r = requests.post(d['destination'], data='{}', headers=headers, verify=verify)
         
         d['lastevent'] = os.path.join(confpath,'trace.db')
 
