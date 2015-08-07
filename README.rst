@@ -25,7 +25,7 @@ sneeze
 | ``sneeze run``
 | 
 **Behaviour**
-| 
+ 
 | sneeze will not attempt to dictate to the receiver anything about what to do with the event. Identifying the event's rule and text description, feeding the event into a database or forwarding to another host, is entirely the responsibility of the receiver. sneeze only verifies that the receiver accepts the delivered event.
 |
 | A receiver for sneeze events should respond with a 200 OK code when an event has been accepted.
