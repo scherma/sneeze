@@ -22,7 +22,6 @@ setuptools.setup(
     install_requires = [
         "requests",
         "watchdog",
-        "sqlite3",
         "unified2"
     ],
     long_description = read('README.rst'),
