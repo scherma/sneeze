@@ -200,7 +200,7 @@ class HayFever(RegexMatchingEventHandler):
             # If we fail at delivering the data, complain.
             if not success == 200:
                 alert = 'Alert: {} attempts to send event data failed'.format(str(tries))
-                r = requests.put(self.send_to, headers={'User-Agent': self.useragent,
+                r = requests.post(self.send_to, headers={'User-Agent': self.useragent,
                     'Content-Type': 'text/plain'}, data=alert, verify=self.verify)
             else:
                 self.write_last_event(eventdata)
