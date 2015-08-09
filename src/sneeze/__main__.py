@@ -4,6 +4,8 @@ import sys
 import sneeze
 import argparse
 import configure
+import settings
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -20,6 +22,7 @@ def main():
     parser_init.add_argument('-c',
         help="Specify a location to store the config file. Defaults to user config directory.")
     parser_init.set_defaults(func=init)
+    parser.add_argument('--version', action='version', version='%(prog)s {}'.format(settings.sneezeversion))
 
     parser_run.set_defaults(func=run)
     args = parser.parse_args()

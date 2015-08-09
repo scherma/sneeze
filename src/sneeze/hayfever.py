@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from watchdog.events import RegexMatchingEventHandler
-import unified2.parser, re, json, requests, struct, base64, socket, os.path, time, sqlite3, sys
+import unified2.parser, re, json, requests, base64, socket
+import os.path, time, sqlite3, sys, spooler, threading
 from requests import ConnectionError
 
 class HayFever(RegexMatchingEventHandler):
@@ -14,9 +15,12 @@ class HayFever(RegexMatchingEventHandler):
             else: self.verify=True
             self.watch = kwargs.pop('watch')
             self.retry_time = kwargs.pop('retry_time')
+            self.timer = threading.Timer(self.retry_time, self.unwind_spool)
         except KeyError as e:
             print >> sys.stderr, "You have not defined '{}' properly in the config file!".format(e.args[0])
             exit()
+        print "__init__"
+        self.unwind_spool()
         self.on_start()
 
     def _interface_for_event(self, event):
@@ -71,30 +75,34 @@ class HayFever(RegexMatchingEventHandler):
 
             return event
 
-
+    def build_events_into_dict(self, events, ev, ev_tail):
+        # events have an entry defining the signature, revision etc
+        # but may have an additional entry containing packet data
+        # therefore only create a new list if the event is not already
+        # found in the dict we are building
+        if ev['event_id'] not in events:
+            events[ev['event_id']] = []
+        events[ev['event_id']].append(ev)
+        if "packet_data" in ev:
+            ev['packet_data'] = base64.b64encode(ev['packet_data'])
+            b64tail = base64.b64encode(ev_tail)
+            events[ev['event_id']].append(b64tail)
 
 
     def find_new_events_in_file(self, eventfile, lastevent):
         events = {}
-        # First make sure the file that changed is unified2
-#        if re.search('\\.u2\\.\\d+$', eventfile):
         # Check every event in the file
         if not os.path.isdir(eventfile):
             for (ev, ev_tail,) in unified2.parser.parse(eventfile):
                 # If it's a new event, add it to the dict
-                if ( int(ev['event_second']) >= int(lastevent['event_time']) 
-                and int(ev['event_id']) != int(lastevent['event_id'])):
-                    # events have an entry defining the signature, revision etc
-                    # but may have an additional entry containing packet data
-                    # therefore only create a new list if the event is not already
-                    # found in the dict we are building
-                    if ev['event_id'] not in events:
-                        events[ev['event_id']] = []
-                    events[ev['event_id']].append(ev)
-                    if "packet_data" in ev:
-                        ev['packet_data'] = base64.b64encode(ev['packet_data'])
-                        b64tail = base64.b64encode(ev_tail)
-                        events[ev['event_id']].append(b64tail)
+                # Need to split this out, otherwise traffic that causes multiple
+                # events will result in duplicate transmissions of all but the
+                # first event in a group
+                if ( int(ev['event_second']) == int(lastevent['event_time'])): 
+                    if int(ev['event_id']) > int(lastevent['event_id']):
+                        self.build_events_into_dict(events, ev, ev_tail)
+                elif int(ev['event_second']) > int(lastevent['event_time']):
+                    self.build_events_into_dict(events, ev, ev_tail)
         return events
 
 
@@ -117,15 +125,22 @@ class HayFever(RegexMatchingEventHandler):
 
     def write_last_event(self, events):
         # Store the highest delivered event ID in the last event db file
-        with sqlite3.connect(self.lasteventfile) as lastev:
-            c = lastev.cursor()
-            for interface, values in events['eventdata'].iteritems():
+        for interface, values in events['eventdata'].iteritems():
+            with sqlite3.connect(self.lasteventfile) as lastev:
+                c = lastev.cursor()
                 # update DB file with each interface's most recent event
-                maxid = max([ int(k) for k in values.keys() ])
-                sqlstr = "INSERT OR REPLACE INTO lastevent (event_id, event_time, event_micro_time, transmit_time, interface) VALUES (?, ?, ?, ?, ?)"
-                values = [maxid, values[maxid][0]["event_second"], values[maxid][0]["event_microsecond"], time.time(), interface]
-                c.execute(sqlstr,values)
-                lastev.commit()
+                lastevsql = "SELECT event_id,event_time FROM lastevent WHERE interface = ?"
+                c.execute(lastevsql, [interface])
+                rows = c.fetchone()
+                maxid = max([ int(k) for k in values ])
+                if (values[maxid][0]["event_second"] > rows[1] or
+                    (values[maxid][0]["event_second"] == rows[1] and
+                    maxid > rows[0] )):
+                    # only insert/replace if the event is newer - 
+                    sqlstr = "INSERT OR REPLACE INTO lastevent (event_id, event_time, event_micro_time, transmit_time, interface) VALUES (?, ?, ?, ?, ?)"
+                    insertvals = [maxid, values[maxid][0]["event_second"], values[maxid][0]["event_microsecond"], time.time(), interface]
+                    c.execute(sqlstr,insertvals)
+                    lastev.commit()
 
 
 
@@ -169,10 +184,10 @@ class HayFever(RegexMatchingEventHandler):
 
 
 
-    def send_data(self, eventdata):
+    def send_data(self, eventdata, spooledevent=False):
         # only send if there is data to be sent
+        success = None
         if eventdata:
-            success = None
             tries = 0
             r = None
             # If at first you don't succeed, try again. And again, and again, and again, and again.
@@ -184,48 +199,73 @@ class HayFever(RegexMatchingEventHandler):
                 url = self.send_to
                 r = requests.post(url, headers=headers, data=json.dumps(eventdata), verify=self.verify)
                 success = r.status_code
-#                if r.status_code == 200:
-#                    tries = 5
-#                    success = r.status_code
-#                    break
-#                tries += 1
+                if not r.status_code == 200:
+                    if not spooledevent:
+                        spooler.spool_data(json.dumps(eventdata))
+                        errorstr = "Warning: server unable to accept events. Spooling events to file."
+                        print >> sys.stderr, errorstr
+                else:
+                    self.write_last_event(eventdata)
             except ConnectionError as e:
-                errorstr = "Warning: could not reach {}. Retrying in {} seconds.".format(self.send_to, self.retry_time)
-                print >> sys.stderr, errorstr
-                time.sleep(self.retry_time)
-                # lots more events might have come in while sleeping - check for all new events.
-                self.on_start()
-        
-        
-            # If we fail at delivering the data, complain.
-            if not success == 200:
-                alert = 'Alert: {} attempts to send event data failed'.format(str(tries))
-                r = requests.post(self.send_to, headers={'User-Agent': self.useragent,
-                    'Content-Type': 'text/plain'}, data=alert, verify=self.verify)
+                if not spooledevent:
+                    spooler.spool_data(json.dumps(eventdata))
+                    errorstr = "Warning: could not reach {}.".format(self.send_to)
+                    print >> sys.stderr, errorstr
+        return success
+    
+
+    def start_timer(self):
+        if not self.timer.is_alive():
+            print >> sys.stderr, "Warning: retrying in {} seconds.".format(self.retry_time)
+            self.timer = threading.Timer(self.retry_time, self.unwind_spool)
+            self.timer.start()
+
+
+    def unwind_spool(self):
+        self.timer.cancel()
+        self.timer = threading.Timer(self.retry_time, self.unwind_spool)
+        if spooler.spool_size() > 0:
+            events = {}
+            events['eventdata'] = spooler.unspool_data()
+            events['sensor'] = socket.gethostname()
+            success = 200 == self.send_data(events, True)
+            if success:
+                spooler.zero_spool()
             else:
-                self.write_last_event(eventdata)
+                self.start_timer()
+        
 
-
+    def on_failed_send(eventdata):
+        spooler.spool_data(json.dumps(eventdata))
 
     def on_created(self, event):
+        self.timer.cancel()
+        print "on created"
+        self.unwind_spool()
         ev_interface = self._interface_for_event(event)
         if ev_interface:
             events = self.build_data_to_send(interface=ev_interface, event=event, path=event.src_path)
             if ev_interface in events['eventdata'].keys() and len(events['eventdata'][ev_interface]) > 0:
-                self.send_data(events)
+                success = 200 == self.send_data(events)
+                if not success: self.start_timer()
 
 
 
     def on_modified(self, event):
+        self.timer.cancel()
+        print "on modified"
+        self.unwind_spool()
         ev_interface = self._interface_for_event(event)
         if ev_interface:
             events = self.build_data_to_send(interface=ev_interface, event=event, path=event.src_path)
             if ev_interface in events['eventdata'].keys() and len(events['eventdata'][ev_interface]) > 0:
-                self.send_data(events)
+                success = 200 == self.send_data(events)
+                if not success: self.start_timer()
 
 
 
     def on_start(self):
         events = self.build_data_to_send(allfiles=True)
         if len(events['eventdata']) > 0:
-            self.send_data(events)
+            success = 200 == self.send_data(events)
+            if not success: self.start_timer()

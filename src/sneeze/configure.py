@@ -5,16 +5,14 @@ import shutil
 import ConfigParser
 import sqlite3
 import requests
-
-appname = "sneeze"
-appauthor = "scherma"
+import settings
 
 
 class Configure():
     def __init__(self):
         d = {}
         d['watch'] = {}
-        confpath = appdirs.user_config_dir(appname,appauthor)
+        confpath = appdirs.user_config_dir(settings.appname, settings.appauthor)
         #self.build_default_config(confpath, dest)
         config = ConfigParser.ConfigParser()
         config.read(os.path.join(confpath,'sneeze.conf'))
@@ -105,7 +103,7 @@ def create_tracefile(dbfile):
 
 
 def init(*args, **kwargs):
-    confpath = appdirs.user_config_dir(appname,appauthor)
+    confpath = appdirs.user_config_dir(settings.appname, settings.appauthor)
     if not os.path.exists(confpath):
         os.makedirs(confpath)
 
