@@ -19,7 +19,6 @@ class HayFever(RegexMatchingEventHandler):
         except KeyError as e:
             print >> sys.stderr, "You have not defined '{}' properly in the config file!".format(e.args[0])
             exit()
-        print "__init__"
         self.unwind_spool()
         self.on_start()
 
@@ -241,7 +240,6 @@ class HayFever(RegexMatchingEventHandler):
 
     def on_created(self, event):
         self.timer.cancel()
-        print "on created"
         self.unwind_spool()
         ev_interface = self._interface_for_event(event)
         if ev_interface:
@@ -254,7 +252,6 @@ class HayFever(RegexMatchingEventHandler):
 
     def on_modified(self, event):
         self.timer.cancel()
-        print "on modified"
         self.unwind_spool()
         ev_interface = self._interface_for_event(event)
         if ev_interface:

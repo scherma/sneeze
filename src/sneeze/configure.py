@@ -25,25 +25,27 @@ class Configure():
 
         instance = ''
         
-        for entry in config.items('sneeze'):
-            if entry[0] == 'instance':
-                d['watch'][entry[1]] = {}
-                instance = entry[1]
-            elif entry[0] in ['path', 'pattern']:
-                if entry[1] not in d['watch'][instance]:
-                    d['watch'][instance][entry[0]] = entry[1]
-                else:
-                    msg = "Error in config file: {} has already been provided for this instance.".format(entry[0])  
-                    raise ValueError(msg)
-            else:
-                d[entry[0]] = entry[1]
-
+        for section in config.sections():
+            if section.startswith('instance'):
+                instance = section.split(':')[1]
+                d['watch'][instance] = {}
                 
+                path = config.get(section, 'path')
+                d['watch'][instance]['path'] = path
+                
+                if config.has_option(section, 'pattern'):
+                    pattern = config.get(instance, 'pattern')
+                    d['watch'][instance]['pattern'] = pattern
+            
+        for (item, value) in config.items('sneeze'):
+            d[item] = value
+
+                        
         # test required items existence
         # validate that required items exist
         if ('cert' in d.keys()) or ('key' in d.keys()):
             required.append(['cert', 'key'])
-
+        
         for key in required:
             if key == 'instance':
                 for instance, value in d['watch'].iteritems():
