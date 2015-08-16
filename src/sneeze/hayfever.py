@@ -81,12 +81,12 @@ class HayFever(RegexMatchingEventHandler):
         # found in the dict we are building
         if ev['event_id'] not in events:
             events[ev['event_id']] = []
-        if "packet_data" in ev:
-            ev['packet_data'] = base64.b64encode(ev['packet_data'])
+        if ev_tail:
             b64tail = base64.b64encode(ev_tail)
             events[ev['event_id']].append((ev,b64tail))
         else:
             events[ev['event_id']].append(ev)
+
 
 
     def find_new_events_in_file(self, eventfile, lastevent):
