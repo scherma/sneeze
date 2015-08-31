@@ -133,7 +133,8 @@ class HayFever(RegexMatchingEventHandler):
                 c.execute(lastevsql, [interface])
                 rows = c.fetchone()
                 maxid = max([ int(k) for k in values ])
-                if (values[maxid][0]["event_second"] > rows[1] or
+                if (rows == None or
+                    values[maxid][0]["event_second"] > rows[1] or
                     (values[maxid][0]["event_second"] == rows[1] and
                     maxid > rows[0] )):
                     # only insert/replace if the event is newer - 
