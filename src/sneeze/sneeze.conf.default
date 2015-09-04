@@ -15,7 +15,11 @@
 #
 destination: https://192.168.0.2:9001/newevent
 useragent: sneeze/0.1
-verifycerts = false
+# verifycerts may be 'true', 'false' or the path to the server.crt file
+verifycerts: false
+#key: /path/to/client/keyfile.key
+#cert: /path/to/client/certfile.crt
+
 
 [instance:em1]
 path: /var/log/snort/em1

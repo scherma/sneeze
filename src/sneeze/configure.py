@@ -44,8 +44,9 @@ class Configure():
         # test required items existence
         # validate that required items exist
         if ('cert' in d.keys()) or ('key' in d.keys()):
-            required.append(['cert', 'key'])
-        
+            required.append('cert')
+            required.append('key')
+
         for key in required:
             if key == 'instance':
                 for instance, value in d['watch'].iteritems():
@@ -53,6 +54,7 @@ class Configure():
                         msg = "Required item 'path' not specified for instance {} in config file.".format(instance)
                         raise ValueError(msg) 
             elif key not in d.keys():
+
                 msg = "Required item {} not specified in config file.".format(key)
                 raise ValueError(msg)
         
@@ -67,28 +69,34 @@ class Configure():
             d['retry_time'] = 60
         else:
             d['retry_time'] = int(d['retry_time'])
-        
         # make sure verifycerts value exists and is valid
         if 'verifycerts' in d.keys():
             if d['verifycerts'] not in ['false', 'true']:
-                raise ValueError("verifycerts must be 'false' or 'true'")
+                if not os.path.exists(d['verifycerts']):
+                    raise ValueError("verifycerts must be 'false' or 'true', or be a path to a certificate file.")
         else:
             d['verifycerts'] = 'true'
-
         # ensure the destination provided is not empty
         if len(d['destination']) < 1:
             raise ValueError("Destination must be provided.")
         else:
             if d['verifycerts'] == 'true':
                 verify = True
-            else:
+            elif d['verifycerts'] == 'false':
                 verify = False
+            else:
+                verify = d['verifycerts']
             # test the connection
             headers = {'content-type': 'application/json', 'user-agent': d['useragent']}
-            r = requests.post(d['destination'], data='{}', headers=headers, verify=verify)
+            if 'key' in d:
+                r = requests.post(d['destination'], data='{}', headers=headers, 
+                    verify=verify, cert=(d['cert'], d['key']))
+            elif d['destination'].startswith('https'):
+                r = requests.post(d['destination'], data='{}', headers=headers, verify=verify)
+            else:
+                r = requests.post(d['destination'], data='{}', headers=headers)
         
         d['lastevent'] = os.path.join(confpath,'trace.db')
-
         self.confdata = d
         
 

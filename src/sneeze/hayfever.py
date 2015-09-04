@@ -11,11 +11,21 @@ class HayFever(RegexMatchingEventHandler):
             self.lasteventfile = kwargs.pop('lastevent')
             self.send_to = kwargs.pop('destination')
             self.useragent = kwargs.pop('useragent')
-            if 'verifycerts' in kwargs and kwargs.pop('verifycerts') == 'false': self.verify=False 
+            if 'verifycerts' in kwargs:
+                certval = kwargs.pop('verifycerts')
+                if certval == 'false': self.verify=False
+                elif certval == 'true': self.verify=True
+                else: self.verify = certval
             else: self.verify=True
             self.watch = kwargs.pop('watch')
             self.retry_time = kwargs.pop('retry_time')
             self.timer = threading.Timer(self.retry_time, self.unwind_spool)
+            if 'key' in kwargs:
+                self.key = kwargs.pop('key')
+                self.cert = kwargs.pop('cert')
+            else:
+                self.key = None
+                self.cert = None
         except KeyError as e:
             print >> sys.stderr, "You have not defined '{}' properly in the config file!".format(e.args[0])
             exit()
@@ -198,7 +208,13 @@ class HayFever(RegexMatchingEventHandler):
                 headers = {'User-Agent': self.useragent,
                 'Content-Type': 'application/json'}
                 url = self.send_to
-                r = requests.post(url, headers=headers, data=json.dumps(eventdata), verify=self.verify)
+                if self.key:
+                    r = requests.post(url, headers=headers, data=json.dumps(eventdata), 
+                        verify=self.verify, cert=(self.cert, self.key))
+                elif url.startswith('https'):
+                    r = requests.post(url, headers=headers, data=json.dumps(eventdata), verify=self.verify)
+                else:
+                    r = requests.post(url, headers=headers, data=json.dumps(eventdata))
                 success = r.status_code
                 if not r.status_code == 200:
                     if not spooledevent:
