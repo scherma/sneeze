@@ -108,6 +108,12 @@ class HayFever(RegexMatchingEventHandler):
                 # Need to split this out, otherwise traffic that causes multiple
                 # events will result in duplicate transmissions of all but the
                 # first event in a group
+
+                # Event IDs can roll back around to zero. Therefore we must work
+                # based on alert time first, and only trust the event ID when
+                # times are identical. This could still break if the rollover
+                # happens for two events within the same second; however, this
+                # seems unlikely.
                 if ( int(ev['event_second']) == int(lastevent['event_time'])): 
                     if int(ev['event_id']) > int(lastevent['event_id']):
                         self.build_events_into_dict(events, ev, ev_tail)
