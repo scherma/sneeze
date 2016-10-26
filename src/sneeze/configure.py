@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import os
+import os, sys
 import appdirs
 import shutil
 import ConfigParser
@@ -9,10 +9,15 @@ import settings
 
 
 class Configure():
-    def __init__(self):
+    def __init__(self, path=""):
         d = {}
         d['watch'] = {}
         confpath = appdirs.user_config_dir(settings.appname, settings.appauthor)
+        if path:
+            confpath = path
+
+        print >> sys.stderr, "Loading config file {}...".format(path)
+
         #self.build_default_config(confpath, dest)
         config = ConfigParser.ConfigParser()
         config.read(os.path.join(confpath,'sneeze.conf'))
@@ -79,28 +84,30 @@ class Configure():
         # ensure the destination provided is not empty
         if len(d['destination']) < 1:
             raise ValueError("Destination must be provided.")
-        else:
-            if d['verifycerts'] == 'true':
-                verify = True
-            elif d['verifycerts'] == 'false':
-                verify = False
-            else:
-                verify = d['verifycerts']
+        #else:
+        #    if d['verifycerts'] == 'true':
+        #        verify = True
+        #    elif d['verifycerts'] == 'false':
+        #        verify = False
+        #    else:
+        #        verify = d['verifycerts']
             # test the connection
-            headers = {'content-type': 'application/json', 'user-agent': d['useragent']}
-            if 'key' in d:
-                r = requests.post(d['destination'], data='{}', headers=headers, 
-                    verify=verify, cert=(d['cert'], d['key']))
-            elif d['destination'].startswith('https'):
-                r = requests.post(d['destination'], data='{}', headers=headers, verify=verify)
-            else:
-                r = requests.post(d['destination'], data='{}', headers=headers)
+            #headers = {'content-type': 'application/json', 'user-agent': d['useragent']}
+            #if 'key' in d:
+            #    r = requests.post(d['destination'], data='{}', headers=headers, 
+            #        verify=verify, cert=(d['cert'], d['key']))
+            #elif d['destination'].startswith('https'):
+            #    r = requests.post(d['destination'], data='{}', headers=headers, verify=verify)
+            #else:
+            #    r = requests.post(d['destination'], data='{}', headers=headers)
         
         d['lastevent'] = os.path.join(confpath,'trace.db')
         self.confdata = d
+        print >> sys.stderr, "Configuration loaded"
         
 
 def create_tracefile(dbfile):
+    print >> sys.stderr, "Creating database file {}".format(dbfile)
     conn = sqlite3.connect(dbfile)
     c = conn.cursor()
 
@@ -115,6 +122,7 @@ def create_tracefile(dbfile):
 def init(*args, **kwargs):
     confpath = appdirs.user_config_dir(settings.appname, settings.appauthor)
     if not os.path.exists(confpath):
+        print >> sys.stderr, "Writing configuration directory {}".format(confpath)
         os.makedirs(confpath)
 
     # initialise the sent events database

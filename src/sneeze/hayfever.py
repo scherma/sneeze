@@ -262,6 +262,7 @@ class HayFever(RegexMatchingEventHandler):
         spooler.spool_data(json.dumps(eventdata))
 
     def on_created(self, event):
+        print >> sys.stderr, "Detected creation of {}".format(event.src_path)
         self.timer.cancel()
         self.unwind_spool()
         ev_interface = self._interface_for_event(event)
@@ -274,6 +275,7 @@ class HayFever(RegexMatchingEventHandler):
 
 
     def on_modified(self, event):
+        print >> sys.stderr, "Detected update of {}".format(event.src_path)
         self.timer.cancel()
         self.unwind_spool()
         ev_interface = self._interface_for_event(event)

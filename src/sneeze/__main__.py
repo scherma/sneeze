@@ -22,6 +22,7 @@ def main():
     parser_init.add_argument('-c',
         help="Specify a location to store the config file. Defaults to user config directory.")
     parser_init.set_defaults(func=init)
+    parser_run.add_argument("-c", dest="confpath", help="Specify a directory to load configs from")
     parser.add_argument('--version', action='version', version='%(prog)s {}'.format(settings.sneezeversion))
 
     parser_run.set_defaults(func=run)
